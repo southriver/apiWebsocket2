@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebSocket and SSE Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 30px; }
+    .messages { border: 1px solid #ccc; padding: 10px; max-width: 600px; height: 200px; overflow-y: auto; }
+    input, button { padding: 5px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>WebSocket Live Chat Example</h2>
+  <p>Send and receive messages through the same connection.</p>
+  <div id="messages" class="messages" role="log" aria-label="WebSocket messages"></div>
+  <input type="text" id="msgInput" placeholder="Type a message..." />
+  <button id="sendBtn" disabled>Send via WebSocket</button>
+
+  <h2>Server-Sent Events (SSE) Example</h2>
+  <p>The server pushes its time every three seconds. Messages sent above also appear here.
+    SSE only receives updates; sending uses the WebSocket connection above.</p>
+  <div id="sseMessages" class="messages" role="log" aria-label="SSE messages"></div>
+
+  <script>
+    const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${wsProtocol}//${location.host}`);
+    const messagesDiv = document.getElementById("messages");
+    const input = document.getElementById("msgInput");
+    const sendBtn = document.getElementById("sendBtn");
+
+    function addMessage(text, color = "black", target = messagesDiv) {
+      const p = document.createElement("p");
+      p.textContent = text;
+      p.style.color = color;
+      target.appendChild(p);
+      // Keep the periodic stream from growing the page indefinitely.
+      while (target.children.length > 100) target.firstElementChild.remove();
+      target.scrollTop = target.scrollHeight;
+    }
+
+    ws.onopen = () => addMessage("Connected to server ✅", "green");
+    ws.onmessage = (event) => addMessage("Server: " + event.data, "blue");
+    ws.onclose = () => addMessage("Disconnected ❌", "red");
+
+    sendBtn.onclick = () => {
+      const message = input.value.trim();
+      if (message && ws.readyState === WebSocket.OPEN) {
+        ws.send(message);
+        addMessage("You: " + message, "gray");
+        input.value = "";
+      }
+    };
+
+    ws.addEventListener("open", () => { sendBtn.disabled = false; });
+    ws.addEventListener("close", () => { sendBtn.disabled = true; });
+    ws.addEventListener("error", () => addMessage("WebSocket connection error", "red"));
+
+    const sseMessages = document.getElementById("sseMessages");
+    const events = new EventSource("/events");
+    events.onopen = () => addMessage("SSE connected", "green", sseMessages);
+    events.onmessage = (event) => {
+      addMessage("Server: " + JSON.parse(event.data), "blue", sseMessages);
+    };
+    events.onerror = () => {
+      addMessage("SSE connection interrupted. Reconnecting automatically...", "red", sseMessages);
+    };
+
+    window.addEventListener("pagehide", () => {
+      events.close();
+      ws.close();
+    });
+  </script>
+</body>
+</html>
